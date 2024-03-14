@@ -411,6 +411,6 @@ def main():
                     except Exception as e:
                         log.warning(f'Could not move report {report}: {e}')
                 log.info(f'Report {report_name} has completed all operations.')
-
+        print('Operations completed.')
 if __name__ == '__main__':
     main()
