@@ -33,11 +33,8 @@ CONFIG_BOILER = {
     'Blancco Username': '',
     'Blancco Password': '',
     'Battery Fail Threshold': 60,
-    'Master Item Laptop': 2025411,
-    'Master Item Desktop': 2003803,
     'Master Item Laptop Model': {
         "attributeType": 'Laptop',
-        "itemNumber": "string",
         "itemTypeId": 1,
         "manufacturer": 0,
         "manufacturerId": 0,
@@ -46,15 +43,16 @@ CONFIG_BOILER = {
     },
     'Master Item Desktop Model': {
         "attributeType": 'Desktop',
-        "itemNumber": "string",
         "manufacturer": 0,
         "manufacturerId": 0,
-        "primaryCategoryId": 0,
+        "primaryCategoryId": 69,
         "title": "string"
         }
 }
 ################################################################
 #LOGGING
+if not os.path.exists(DIR_CONFIG):
+    os.makedirs(DIR_CONFIG)
 logging.basicConfig(level=logging.DEBUG,
     format='%(asctime)s [%(levelname)s]: %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
@@ -75,19 +73,21 @@ for key, path in DIRS.items():
     if not os.path.exists(path):
         os.makedirs(path)
         log.info(f"Created directory: {path}")
-        
-#Make defects file if not found
-if not os.path.exists(DIR_CONFIG_DEFECTS):
-    with open(DIR_CONFIG_DEFECTS, 'w') as file:
-        log.critical('Defects config was not found. Empty configuration created in Config folder. Script exiting.')
-        json.dump({}, file, indent=4)
-        exit()
 
 #Make config file if not found
 if not os.path.exists(DIR_CONFIG_JSON):
     with open(DIR_CONFIG_JSON, 'w') as file:
         log.info('Created config file')
         json.dump(CONFIG_BOILER, file, indent=4)
+
+#Make defects file if not found
+if not os.path.exists(DIR_CONFIG_DEFECTS):
+    with open(DIR_CONFIG_DEFECTS, 'w') as file:
+        log.critical('Defects config was not found. Empty defects.json created in Config folder.')
+        log.critical('Script exiting.')
+        json.dump({}, file, indent=4)
+        exit()
+
 #Check that the config file has all boilerplate entries
 try:
     with open(DIR_CONFIG_JSON, 'r') as file:
@@ -110,11 +110,16 @@ with open(DIR_CONFIG_JSON, 'r') as file:
     CONFIG_DATA = json.load(file)
 with open(DIR_CONFIG_DEFECTS, 'r') as file:
     DEFECT_BANK = json.load(file)
+if DEFECT_BANK == {}:
+    log.critical('Defect bank is configured as empty. Please add defects to defects.json and try again.')
+    log.critical('Script exiting.')
+    exit()
 
 ################################################################
 #HTTP OPERATIONS
 RAZOR_URL = CONFIG_DATA['Razor URL']
 HEADERS = {
+    'user-agent': 'Assetworx',
     'Authorization': f'Bearer {CONFIG_DATA['Razor API Key']}',
     'Accept': 'application/json',
     'Content-Type': 'application/json'
@@ -135,7 +140,6 @@ def HTTP(op, url, data):
     else:
         log.warning(f'[{response.status_code}]: HTTP request: {op} failed. Response from server: {response.text}')
         return response.status_code, response.text
-    
 
 ################################################################
 #FUNCTION BLOCK: REPORTS
@@ -383,27 +387,30 @@ def correct_asset(report, data):
 
 ################################################################
 #MAIN BLOCK
+def main():
+    #Instantiate empty reports dictionary
+    reports = {}
+    #Check for reports and parse them if found.
+    #Reports parsed will be added to reports{} with model report: report_data
+    if (report_files := check_for_reports(DIR_REPORTS)):
+        for report in report_files:
+            report_data = parse_report(report)
+            reports[report] = report_data
 
-#Instantiate empty reports dictionary
-reports = {}
-#Check for reports and parse them if found.
-#Reports parsed will be added to reports{} with model report: report_data
-if (report_files := check_for_reports(DIR_REPORTS)):
-    for report in report_files:
-        report_data = parse_report(report)
-        reports[report] = report_data
-
-if reports:
-    for report, report_data in reports.items():
-        if correct_asset(report, report_data):
-            report_name = os.path.basename(report)
-            uid = report_data['UID']
-            try:
-                os.rename(report, os.path.join(DIR_REPORTS_DONE, f'{uid}.xml'))
-            except Exception as e:
-                log.warning(f'Could not rename report {report_name}: {e}')
+    if reports:
+        for report, report_data in reports.items():
+            if correct_asset(report, report_data):
+                report_name = os.path.basename(report)
+                uid = report_data['UID']
                 try:
-                    shutil.move(report, DIR_REPORTS_DONE)
+                    os.rename(report, os.path.join(DIR_REPORTS_DONE, f'{uid}.xml'))
                 except Exception as e:
-                    log.warning(f'Could not move report {report}: {e}')
-            log.info(f'Report {report_name} has completed all operations.')
+                    log.warning(f'Could not rename report {report_name}: {e}')
+                    try:
+                        shutil.move(report, DIR_REPORTS_DONE)
+                    except Exception as e:
+                        log.warning(f'Could not move report {report}: {e}')
+                log.info(f'Report {report_name} has completed all operations.')
+
+if __name__ == '__main__':
+    main()
