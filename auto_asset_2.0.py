@@ -189,45 +189,52 @@ def parse_report(report):
         log.warning(f'{report}: Report parse error: {e}')
     return keys
 
-def update_master(key_data, json_data):
+def update_master(key_data, json_data, uid):
     chassis_type = key_data['Chassis Type']
     model = key_data['model']
     manufacturer = key_data['Manufacturer']
+    search_phrase = manufacturer
 
-    master_json = config_data['Master Item Laptop Model']
+    #Search for existing MFG, then grab its ID
+    get_status, response = HTTP('GET', f'{RAZOR_URL}Manufacturer?SearchOptions.SearchPhrase={search_phrase}', None)
+    if get_status == 200:
+        items = response.get('items', [])
+        manufacturerId = items[0].get('id', None)
+    #Create MFG if not found in the system
+    if get_status == 404:
+        mfg_json = {
+            "description": "This manufacturer was created by the auto asset script.",
+            "name": {manufacturer}
+        }
+        create_mfg, response = HTTP('POST', f'{RAZOR_URL}Manufacturer', mfg_json)
+        if create_mfg == 200:
+            #Retry getting MFG id with newly added MFG
+            get_status, response = HTTP('GET', f'{RAZOR_URL}Manufacturer?SearchOptions.SearchPhrase={search_phrase}', None)
+            if get_status == 200:
+                items = response.get('items', [])
+                manufacturerId = items[0].get('id', None)
+    #Start laying out json for new master item. Pulls model from config file and modifies where necessary.
+    match chassis_type:
+        case 'Laptop'|'Notebook': master_json = config_data['Master Item Laptop Model']
+        case 'Desktop': master_json = config_data['Master Item Desktop Model']
+        case _: master_json = config_data['Master Item Desktop Model']
     master_json['itemNumber'] = model
     master_json['manufacturer'] = manufacturer
+    master_json['manufacturerId'] = manufacturerId
     master_json['title'] = f'{model} {manufacturer}'
-
-    log.info(master_json)
+    #Send new master item
     post_status, response = HTTP('POST', f'{RAZOR_URL}ItemMaster', master_json)
-    print(post_status)
-    exit()
-
-    # match chassis_type:
-    #     case 'Laptop'|'Notebook': master_id = config_data['Master Item Laptop']
-    #     case 'Desktop': master_id = config_data['Master Item Desktop']
-    #     case _: master_id = config_data['Master Item Laptop']
-    # get_status, master_json = HTTP('GET', f'{RAZOR_URL}ItemMaster/{master_id}', None)
-    # if get_status == 200:
-    #     master_json['itemNumber'] = model
-    #     master_json['id'] = None
-    #     master_json['title'] = f'{model} {manufacturer}'
-    #     post_status, response = HTTP('POST', f'{RAZOR_URL}ItemMaster', master_json)
-    #     if post_status == 200: 
-    #         log.info('Master item added successfully!')
-    #     else: 
-    #         log.warning(f'Could not add master item: {post_status}: {response}')
-    #         log.warning(f'UID {uid}: Could not update! Master Item issue!')
-    #         return False
-    #     #Try sending the updates with new master item
-    #     send_update, response = HTTP('PUT', f'{RAZOR_URL}Asset/{uid}', data)
-    #     if send_update == 200:
-    #         log.info(f'UID {uid}: Updated successfully!')
-    #         return True
-    # else:
-    #     log.warning(f'UID {uid}: Could not update! {get_status}')
-    #     return False
+    if post_status == 200:
+        log.info('Master item added successfully!')
+        send_update, response = HTTP('PUT', f'{RAZOR_URL}Asset/{uid}', json_data)
+        if send_update == 200:
+            log.info(f'UID {uid}: Updated successfully!')
+            return True
+        else:
+            return False
+    else:
+        log.warning(f'UID {uid}: Could not add Master item! {post_status}')
+        return False
 
 def grade_asset(data):
     defects = []
@@ -363,7 +370,7 @@ def correct_asset(report, data):
                 return True
             if send_update == 404:
                 log.warning('Master item not found, creating...')
-                if update_master(data, json_data):
+                if update_master(data, json_data, uid):
                     return True
         if not has_updates:
             log.info(f'UID {uid}: No corrections to be made.')
