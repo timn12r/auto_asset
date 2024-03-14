@@ -299,6 +299,7 @@ def correct_asset(report, data):
                 updates[typeName] = attribute['value']
         if all(attr is None for attr in updates.values()):
             log.warning(f'Attributes for {uid} not found! Got {attributes}')
+            return False
 
         #Lenovo model corrections
         if json_data['manufacturer'] == 'LENOVO':
