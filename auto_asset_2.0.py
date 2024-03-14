@@ -163,7 +163,7 @@ def check_for_reports(dir):
         for report in new_reports:
             reports.append(report)
     else:
-        log.info('No reports found.')
+        print('No reports found.')
     return reports
 
 def parse_report(report):
@@ -412,5 +412,6 @@ def main():
                         log.warning(f'Could not move report {report}: {e}')
                 log.info(f'Report {report_name} has completed all operations.')
         print('Operations completed.')
+
 if __name__ == '__main__':
     main()
