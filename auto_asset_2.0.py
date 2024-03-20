@@ -28,6 +28,7 @@ DIRS = {
 }
 CONFIG_BOILER = {
     'Interval': 'default',
+    'Overwrite Existing Razor Data': 'true',
     'Razor API Key': '',
     'Razor URL': '',
     'Blancco Username': '',
@@ -338,7 +339,7 @@ def correct_asset(report, data):
         #Update attribute only if it isn't already occupied in Razor (prevents overwriting)
         def update_attribute(attributes, attr_type, attr_value):
             for attr in attributes:
-                if attr['typeName'] == attr_type:
+                if attr['typeName'] == attr_type and config_data['Overwrite Existing Razor Data'] == 'false':
                     return False
             attributes.append({'typeName': attr_type, 'value': attr_value})
             return True
