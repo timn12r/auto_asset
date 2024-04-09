@@ -99,6 +99,7 @@ try:
         for key, value in CONFIG_BOILER.items():
             if key not in config_data:
                 config_data[key] = value
+                log.info(f'Detected missing config info. Pulling {key} from config boiler.')
     #Write missing data
     with open(DIR_CONFIG_JSON, 'w') as file:
         json.dump(config_data, file, indent=4)
@@ -160,7 +161,7 @@ def error_handler(error, report, uid):
 def check_for_reports(dir):
     reports = []
     if (new_reports := glob.glob(f'{DIR_REPORTS}/*.xml')):
-        log.info('New reports found!')
+        print('New reports found!')
         for report in new_reports:
             reports.append(report)
     else:
@@ -219,10 +220,10 @@ def update_master(key_data, json_data, uid):
                 items = response.get('items', [])
                 manufacturerId = items[0].get('id', None)
     #Start laying out json for new master item. Pulls model from config file and modifies where necessary.
-    match chassis_type:
-        case 'Laptop'|'Notebook': master_json = config_data['Master Item Laptop Model']
+    match chassis_type:     #Chooses chassis type based on Blancco report
+        case 'Laptop'|'Notebook' | 'Convertible': master_json = config_data['Master Item Laptop Model']
         case 'Desktop': master_json = config_data['Master Item Desktop Model']
-        case _: master_json = config_data['Master Item Desktop Model']
+        case _: master_json = config_data['Master Item Laptop Model']
     master_json['itemNumber'] = model
     master_json['manufacturer'] = manufacturer
     master_json['manufacturerId'] = manufacturerId
