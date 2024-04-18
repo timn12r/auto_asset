@@ -1,0 +1,28 @@
+For use with assets with less components (ie Desktops)
+--Cosmetic Defects:
+No defects,
+Scratching: light,
+Scratching: medium,
+Scratching: heavy,
+Sticker stain,
+Dent: small,
+Dent: large,
+Dents: multiple,
+Crack: chassis,
+Chip in chassis: small,
+Chip in chassis: large,
+Paint wear: light,
+Paint wear: heavy,
+Foot missing,
+Foot missing: multiple
+
+  --Functional Defects:
+No defects,
+Speaker fail (single channel),
+Speaker fail (both channels),
+USB fail,
+USB fail (multiple),
+CPU/Mobo/RAM fail,
+Port damaged: power,
+Port damaged: video,
+Networking fail,
