@@ -99,12 +99,12 @@ try:
         for key, value in CONFIG_BOILER.items():
             if key not in config_data:
                 config_data[key] = value
-                log.info(f'Detected missing config info. Pulling {key} from config boiler.')
+                log.warning(f'Detected missing config info. Pulling {key} from config boiler.')
     #Write missing data
     with open(DIR_CONFIG_JSON, 'w') as file:
         json.dump(config_data, file, indent=4)
-except:
-    #Overwrite entire json file with boiler if json is empty or corrupt
+except FileNotFoundError:
+    #Overwrite entire json file with boiler if json file is missing
     with open(DIR_CONFIG_JSON, 'w') as file:
         json.dump(CONFIG_BOILER, file, indent=4)
 #Load config data
