@@ -3,6 +3,8 @@ import os
 import re
 import json
 import glob
+import math
+import datetime
 import shutil
 import logging
 import requests
@@ -145,18 +147,37 @@ def HTTP(op, url, data):
 
 ################################################################
 #FUNCTION BLOCK: REPORTS
+def move_report(report, uid, target_dir):
+    report_name = os.path.basename(report)
+    if uid is not None:
+        try:
+            os.rename(report, os.path.join(target_dir, f'{uid}.xml'))
+            return
+        except Exception as e:
+            log.warning(f'Could not rename file {report_name} {e}')
+    else:
+        try:
+            os.rename(report, os.path.join(target_dir, f'{report_name}.xml'))
+        except Exception as e:
+            log.critical(f'Could not move report {report_name}!')
+
 def error_handler(error, report, uid):
     report_name = os.path.basename(report)
     match error:
         case 'Bad UID':
             log.critical(f'Bad UID detected with filename {report_name}!')
-            try:
-                os.rename(report, os.path.join(DIR_REPORTS_UID, f'{uid}.xml'))
-            except Exception as e:
-                log.warning(f'Could not rename file {report_name} {e}')
-                #shutil.move(report, DIR_REPORTS_UID)
-        case _:
-            log.critical('Bad error operation code provided!')
+            move_report(report, uid, DIR_REPORTS_UID)
+
+        case 'Missing Attributes':
+            today = datetime.datetime.today()
+            modified_date = datetime.datetime.fromtimestamp(os.path.getmtime(report))
+            file_age = today - modified_date
+            log.info(f'Attributes for {uid} have not been imported yet ({math.floor(file_age.seconds/60)} minutes old).')
+            #Move the report into the issues dir if it never receives its attributes
+            if file_age.seconds > 600:
+                log.warning(f'Attributes for {uid} were not imported after 10 minutes.')
+                move_report(report, uid, DIR_REPORTS_ISSUES)
+        
 
 def check_for_reports(dir):
     reports = []
@@ -299,8 +320,9 @@ def correct_asset(report, data):
         for attribute in attributes:
             if (typeName := attribute['typeName']) in updates:
                 updates[typeName] = attribute['value']
+        #Asset either has not received Blancco data yet or does not have a linked report
         if all(attr is None for attr in updates.values()):
-            log.warning(f'Attributes for {uid} not found! Got {attributes}')
+            error_handler('Missing Attributes', report, uid)
             return False
 
         #Lenovo model corrections
