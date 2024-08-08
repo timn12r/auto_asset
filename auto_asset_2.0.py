@@ -7,6 +7,7 @@ import math
 import datetime
 import shutil
 import logging
+from logging.handlers import RotatingFileHandler
 import requests
 import xml.etree.ElementTree as ET
 
@@ -56,17 +57,26 @@ CONFIG_BOILER = {
 #LOGGING
 if not os.path.exists(DIR_CONFIG):
     os.makedirs(DIR_CONFIG)
-logging.basicConfig(level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s]: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    filename=DIR_CONFIG_LOGS,
-    filemode='a')
+
+# Set up RotatingFileHandler
+file_handler = RotatingFileHandler(
+    DIR_CONFIG_LOGS,  # Log file path
+    maxBytes=1*1024*1024,  # Maximum log size (1MB)
+    backupCount=2  # Number of backup logs to keep
+)
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s [%(levelname)s]: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
+# Create a logger
 log = logging.getLogger()
-#Console output
+log.setLevel(logging.DEBUG)
+log.addHandler(file_handler)
+# Set up console output (StreamHandler)
 log_handler = logging.StreamHandler()
 log_handler.setLevel(logging.INFO)
-log_formatter = logging.Formatter('%(asctime)s [%(levelname)s]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-log_handler.setFormatter(log_formatter)
+log_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 log.addHandler(log_handler)
 
 ################################################################
