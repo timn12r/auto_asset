@@ -188,6 +188,9 @@ def error_handler(error, report, uid):
                 log.warning(f'Attributes for {uid} were not imported after 10 minutes.')
                 move_report(report, uid, DIR_REPORTS_ISSUES)
         
+        case 'Misc Error':
+            log.warning(f'UID {uid} experienced an issue with the server. Placing into Issues folder.')
+            move_report(report, uid, DIR_REPORTS_ISSUES)
 
 def check_for_reports(dir):
     reports = []
@@ -344,21 +347,28 @@ def correct_asset(report, data):
 
         #Clean cpu
         cpu_pattern = r'(Intel\(R\)) (\S+) (\S+)|(AMD) (\S+ \S+ \S+)'
+        cpu_xeon_pattern = r'(Intel|\(R\)|CPU|(\s@\s\S+?)(?=,|$))'
         if (cpu_model := updates['CPU Type']) is not None:
+            #Check CPU Patterns
             if (match := re.search(cpu_pattern, cpu_model)):
-                has_updates = True
+                #Intel Format
                 if match.group(1):
-                    #Intel Format
                     cpu_type = match.group(3)
-                    log.info(f'UID {uid}: Reformatting CPU -> {match.group(3)}.')
+                #AMD Format
                 elif match.group(4):
-                    #AMD Format
                     cpu_type = match.group(5)
-                    log.info(f'UID {uid}: Reformatting CPU -> {match.group(5)}.')
+            #Check for Xeon CPUs
+            if 'Xeon' in cpu_model:
+                cpu_type = re.sub(cpu_xeon_pattern, '', cpu_model)
+                cpu_type = re.sub(r'\s+', ' ', cpu_type).strip()
+            #Check if CPU is not formatted in Razor
+            if '@' in cpu_model:
+                has_updates = True
+                log.info(f'UID {uid}: Reformatting CPU -> {cpu_type}.')
                 for attr in attributes:
                     if attr['typeName'] == 'CPU Type':
                         attr['value'] = cpu_type
-        
+
         #Clean battery and assign defect if wear level below thre\shold (60%)
         battery_pattern = r'\d+%'
         if (wear := updates['Battery Wear Level']) is not None:
@@ -411,6 +421,8 @@ def correct_asset(report, data):
                 log.warning('Master item not found, creating...')
                 if update_master(data, json_data, uid):
                     return True
+            if send_update == 400:
+                error_handler('Misc Error', report, uid)
         if not has_updates:
             log.info(f'UID {uid}: No corrections to be made.')
             return True
@@ -418,8 +430,10 @@ def correct_asset(report, data):
     #UID Failed Razor verify
     if verify_status == 404:
         error_handler('Bad UID', report, uid)
-    
 
+    if verify_status == 400:
+        error_handler('Misc Error', report, uid)
+    
 ################################################################
 #MAIN BLOCK
 def main():
