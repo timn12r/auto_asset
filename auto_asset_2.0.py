@@ -7,9 +7,10 @@ import math
 import datetime
 import shutil
 import logging
-from logging.handlers import RotatingFileHandler
 import requests
 import xml.etree.ElementTree as ET
+from logging.handlers import RotatingFileHandler
+from collections import Counter
 
 ##############################################################
 #Path handling
@@ -346,28 +347,29 @@ def correct_asset(report, data):
                 log.info(f'UID {uid}: Lenovo MFG detected, updating model.')
 
         #Clean cpu
-        cpu_pattern = r'(Intel\(R\)) (\S+) (\S+)|(AMD) (\S+ \S+ \S+)'
-        cpu_xeon_pattern = r'(Intel|\(R\)|CPU|(\s@\s\S+?)(?=,|$))'
-        if (cpu_model := updates['CPU Type']) is not None:
-            #Check CPU Patterns
-            if (match := re.search(cpu_pattern, cpu_model)):
-                #Intel Format
-                if match.group(1):
-                    cpu_type = match.group(3)
-                #AMD Format
-                elif match.group(4):
-                    cpu_type = match.group(5)
-            #Check for Xeon CPUs
-            if 'Xeon' in cpu_model:
-                cpu_type = re.sub(cpu_xeon_pattern, '', cpu_model)
-                cpu_type = re.sub(r'\s+', ' ', cpu_type).strip()
-            #Check if CPU is not formatted in Razor
-            if '@' in cpu_model:
-                has_updates = True
-                log.info(f'UID {uid}: Reformatting CPU -> {cpu_type}.')
-                for attr in attributes:
-                    if attr['typeName'] == 'CPU Type':
-                        attr['value'] = cpu_type
+        #Tags to remove to clean CPU formatting
+        #                   Branding                 CPU   @   0.00GHz
+        text_to_remove = r'Intel|\(R\)|\(TM\)|Core| CPU|\s@\s|\d+(\.\d+)?GHz'
+        razor_cpus = updates['CPU Type']
+        #Check if CPU(s) are not formatted in Razor
+        if '@' in razor_cpus:
+            has_updates = True
+            log.info(f'UID {uid}: Reformatting CPU(s).')
+            cpu_list = razor_cpus.split(', ')
+            cleaned_cpus = [
+                re.sub(text_to_remove, '', cpu).strip()
+                for cpu in cpu_list
+            ]
+            #In cases where there are multiple CPUs. Condense them into (x2, x3, etc)
+            cpu_qty = Counter(cleaned_cpus)
+            formatted_cpus = [
+                f'(x{qty}) {cpu}' if qty > 1 else cpu
+                for cpu, qty in cpu_qty.items()
+            ]
+            finished_cpus = ', '.join(formatted_cpus)
+            for attr in attributes:
+                if attr['typeName'] == 'CPU Type':
+                    attr['value'] = finished_cpus
 
         #Clean battery and assign defect if wear level below thre\shold (60%)
         battery_pattern = r'\d+%'
