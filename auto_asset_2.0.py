@@ -1,4 +1,3 @@
-
 import os
 import re
 import json
@@ -17,6 +16,7 @@ from collections import Counter
 ROOT = os.path.dirname(os.path.realpath(__file__))
 DIR_REPORTS = os.path.join(ROOT, 'Reports')
 DIR_REPORTS_ISSUES = os.path.join(DIR_REPORTS, 'Issues')
+DIR_REPORTS_EXPIRED = os.path.join(DIR_REPORTS, 'Expired')
 DIR_REPORTS_UID = os.path.join(DIR_REPORTS, 'UID Error')
 DIR_REPORTS_DONE = os.path.join(DIR_REPORTS, 'Processed')
 DIR_CONFIG = os.path.join(ROOT, 'Config')
@@ -26,6 +26,7 @@ DIR_CONFIG_LOGS = os.path.join(DIR_CONFIG, 'logs.log')
 DIRS = {
     'DIR_REPORTS': DIR_REPORTS,
     'DIR_REPORTS_ISSUES': DIR_REPORTS_ISSUES,
+    'DIR_REPORTS_EXPIRED': DIR_REPORTS_EXPIRED,
     'DIR_REPORTS_UID': DIR_REPORTS_UID,
     'DIR_REPORTS_DONE': DIR_REPORTS_DONE,
     'DIR_CONFIG': DIR_CONFIG
@@ -134,7 +135,6 @@ if DEFECT_BANK == {}:
 #HTTP OPERATIONS
 RAZOR_URL = CONFIG_DATA['Razor URL']
 HEADERS = {
-    'user-agent': 'Assetworx',
     'Authorization': f'Bearer {CONFIG_DATA['Razor API Key']}',
     'Accept': 'application/json',
     'Content-Type': 'application/json'
@@ -199,8 +199,8 @@ def error_handler(error, report, uid):
             log.info(f'Attributes for {uid} have not been imported yet ({math.floor(file_age.seconds/60)} minutes old).')
             #Move the report into the issues dir if it never receives its attributes
             if file_age.seconds > 600:
-                log.warning(f'Attributes for {uid} were not imported after 10 minutes.')
-                move_report(report, uid, DIR_REPORTS_ISSUES)
+                log.warning(f'Attributes for {uid} were not imported after 10 minutes. Moving to Expired folder.')
+                move_report(report, uid, DIR_REPORTS_EXPIRED)
         
         case 'Misc Error':
             log.warning(f'UID {uid} experienced an issue with the server. Placing into Issues folder.')
