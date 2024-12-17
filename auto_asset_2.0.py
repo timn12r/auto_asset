@@ -161,16 +161,29 @@ def HTTP(op, url, data):
 def move_report(report, uid, target_dir):
     report_name = os.path.basename(report)
     if uid is not None:
+        target_file = os.path.join(target_dir, f'{uid}.xml')
+        # Check if the file already exists and increment the filename if necessary
+        i = 1
+        while os.path.exists(target_file):
+            target_file = os.path.join(target_dir, f'{uid}_{i}.xml')
+            i += 1
         try:
-            os.rename(report, os.path.join(target_dir, f'{uid}.xml'))
-            return
+            os.rename(report, target_file)
+            log.info(f"Successfully moved report {report_name} to {target_file}")
         except Exception as e:
-            log.warning(f'Could not rename file {report_name} {e}')
+            log.warning(f'Could not rename file {report_name} to {target_file}: {e}')
     else:
+        # If no UID, just use the original report name
+        target_file = os.path.join(target_dir, f'{report_name}.xml')
+        i = 1
+        while os.path.exists(target_file):
+            target_file = os.path.join(target_dir, f'{report_name}_{i}.xml')
+            i += 1
         try:
-            os.rename(report, os.path.join(target_dir, f'{report_name}.xml'))
+            os.rename(report, target_file)
+            log.info(f"Successfully moved report {report_name} to {target_file}")
         except Exception as e:
-            log.critical(f'Could not move report {report_name}!')
+            log.critical(f'Could not move report {report_name}: {e}')
 
 def error_handler(error, report, uid):
     report_name = os.path.basename(report)
@@ -326,9 +339,10 @@ def correct_asset(report, data):
 
     if verify_status == 200:
         #Dictionary of attributes that need reformating, and boolean to determine if asset needs updates
-        json_data = response
-        updates, has_updates = { 'CPU Type': None, 'Battery Wear Level': None }, False
-        attributes = json_data['attributes']
+        json_data = response                                                            #JSON data about the asset
+        updates, has_updates = { 'CPU Type': None, 'Battery Wear Level': None }, False  #Instantiate empty dictionary of potential updates
+        attributes = json_data['attributes']                                            #Attributes from Razor
+        grades, defects = grade_asset(data)                                             #Grab grades and defects
 
         #Filter to find attributes that need updating
         for attribute in attributes:
@@ -339,12 +353,14 @@ def correct_asset(report, data):
             error_handler('Missing Attributes', report, uid)
             return False
 
+
         #Lenovo model corrections
         if json_data['manufacturer'] == 'LENOVO':
             if model.upper() != json_data['model']:
                 json_data['model'] = model.upper()
                 has_updates = True
                 log.info(f'UID {uid}: Lenovo MFG detected, updating model.')
+
 
         #Clean cpu
         #Tags to remove to clean CPU formatting
@@ -363,7 +379,7 @@ def correct_asset(report, data):
             #In cases where there are multiple CPUs. Condense them into (x2, x3, etc)
             cpu_qty = Counter(cleaned_cpus)
             formatted_cpus = [
-                f'(x{qty}) {cpu}' if qty > 1 else cpu
+                f'{cpu} (x{qty})' if qty > 1 else cpu
                 for cpu, qty in cpu_qty.items()
             ]
             finished_cpus = ', '.join(formatted_cpus)
@@ -371,10 +387,27 @@ def correct_asset(report, data):
                 if attr['typeName'] == 'CPU Type':
                     attr['value'] = finished_cpus
 
-        #Clean battery and assign defect if wear level below thre\shold (60%)
+        #Clean battery and assign defect if wear level below threshold (60%)
         battery_pattern = r'\d+%'
-        if (wear := updates['Battery Wear Level']) is not None:
-            if not (match := re.search(battery_pattern, wear)):
+        wear = updates['Battery Wear Level']
+        if wear:
+            #Search for integers in the wear level from Razor
+            match = re.search(r'\b([0-9]{1,3})\b', wear)
+            if match:
+                #Format and update wear level for Razor's end
+                wear_formatted = match.group(1) + '%'
+                wear_int = int(match.group(1))
+                if wear_int < config_data['Battery Fail Threshold']:
+                    if '-' in defects:
+                        defects.remove('-')
+                        defects.append(f'Battery {wear_int}%')
+                        has_updates = True
+            else:
+                #Catches any edge-case strings and leaves them as is
+                log.warning(f'UID {uid}: Invalid wear level, skipping reformat.')
+                wear_formatted = wear
+            #Check to see if the wear level is correctly formatted
+            if wear != wear_formatted:
                 has_updates = True
                 log.info(f'UID {uid}: Reformatting battery wear.')
                 for attr in attributes:
@@ -388,19 +421,6 @@ def correct_asset(report, data):
                     return False
             attributes.append({'typeName': attr_type, 'value': attr_value})
             return True
-        
-        #Grab battery status, grades, and defects
-        grades, defects = grade_asset(data)
-        if wear:
-            if isinstance(wear, str):
-                wear_int = int(re.search(r'\d+', wear).group())
-            else:
-                wear_int = int(wear)
-            if wear_int < config_data['Battery Fail Threshold']:
-                if '-' in defects:
-                    defects.remove('-')
-                defects.append(f'Battery {wear_int}%')
-                has_updates = True
 
         #Update Defect, Cosmetic and Functionality fields, if applicable
         if update_attribute(attributes, 'Defect', ', '.join(defects)):
@@ -453,14 +473,12 @@ def main():
             if correct_asset(report, report_data):
                 report_name = os.path.basename(report)
                 uid = report_data['UID']
+                
                 try:
-                    os.rename(report, os.path.join(DIR_REPORTS_DONE, f'{uid}.xml'))
+                    move_report(report, uid, DIR_REPORTS_DONE)
                 except Exception as e:
-                    log.warning(f'Could not rename report {report_name}: {e}')
-                    try:
-                        shutil.move(report, DIR_REPORTS_DONE)
-                    except Exception as e:
-                        log.warning(f'Could not move report {report}: {e}')
+                    log.warning(f'Could not move report f{report}: {e}')
+                
                 log.info(f'Report {report_name} has completed all operations.')
         print('Operations completed.')
 
